@@ -29,6 +29,7 @@
   assert !$._config.ingest_storage_ingester_autoscaling_enabled || $._config.multi_zone_ingester_enabled : 'partitions ingester autoscaling is only supported with multi-zone ingesters in namespace %s' % $._config.namespace,
   assert !$._config.ingest_storage_ingester_autoscaling_ingester_annotations_enabled || $._config.multi_zone_ingester_replicas <= 0 : 'partitions ingester autoscaling and multi_zone_ingester_replicas are mutually exclusive in namespace %s' % $._config.namespace,
   assert !$._config.ingest_storage_ingester_autoscaling_ingester_annotations_enabled || !$._config.ingester_automated_downscale_enabled : 'partitions ingester autoscaling and ingester automated downscale config are mutually exclusive in namespace %s' % $._config.namespace,
+  assert !$._config.ingest_storage_ingester_autoscaling_ingester_annotations_enabled || !$._config.ingester_automated_downscale_v2_enabled : 'partitions ingester autoscaling and ingester automated downscale v2 config are mutually exclusive in namespace %s' % $._config.namespace,
   assert !$._config.ingest_storage_ingester_autoscaling_enabled || $.rollout_operator_deployment != null : 'partitions ingester autoscaling requires rollout-operator in namespace %s' % $._config.namespace,
 
   // Create resource that will be targetted by ScaledObject.
@@ -118,8 +119,7 @@
         advanced: {
           horizontalPodAutoscalerConfig: {
             behavior: {
-              // Allow 100% upscaling of pods if scale up is indicated for 10 minutes to see effects of scaling faster.
-              // Use a lookback period of 30 minutes, which will only upscale to the min(requestedReplicas) over that period
+              // Allow 100% upscaling of pods every 10 minutes to the min value of desired replicas over last 30 minutes.
               scaleUp: {
                 policies: [
                   {
@@ -128,19 +128,18 @@
                     periodSeconds: $.util.parseDuration('10m'),
                   },
                 ],
-                selectPolicy: 'Min',
+                selectPolicy: 'Min',  // This would only have effect if there were multiple policies.
                 stabilizationWindowSeconds: $.util.parseDuration('30m'),
               },
-              // Allow 10% downscaling of pods if scale down is indicated for 30 minutes.
-              // Use a lookback period of 60 minutes, which will only downscale to the max(requestedReplicas) over that period
+              // Allow 10% downscaling of pods every 30 minutes to the max value of desired replicas over last 60 minutes.
               scaleDown: {
                 policies: [{
                   type: 'Percent',
                   value: 10,
                   periodSeconds: $.util.parseDuration('30m'),
                 }],
-                selectPolicy: 'Max',
-                stabilizationWindowSeconds: $.util.parseDuration('1h'),  // We can't go higher than 1h.,
+                selectPolicy: 'Max',  // This would only have effect if there were multiple policies.
+                stabilizationWindowSeconds: $.util.parseDuration('1h'),
               },
             },
           },
